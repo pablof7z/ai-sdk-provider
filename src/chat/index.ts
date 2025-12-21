@@ -1000,17 +1000,23 @@ export class OpenRouterChatLanguageModel implements LanguageModelV3 {
 
           flush(controller) {
             // Fix for Gemini 3 thoughtSignature: when there are tool calls with encrypted
-            // reasoning (thoughtSignature), the model returns 'stop' but expects continuation.
-            // Override to 'tool-calls' so the SDK knows to continue the conversation.
+            // reasoning (thoughtSignature), the model may return 'stop', 'other', 'unknown',
+            // or no finish_reason at all. Override to 'tool-calls' so the SDK knows to continue.
             const hasToolCalls = toolCalls.length > 0;
             const hasEncryptedReasoning = accumulatedReasoningDetails.some(
               (d) => d.type === ReasoningDetailType.Encrypted && d.data,
             );
+            // Override if we have tool calls with encrypted reasoning and finish reason isn't already 'tool-calls'
             if (
               hasToolCalls &&
               hasEncryptedReasoning &&
-              finishReason === 'stop'
+              finishReason !== 'tool-calls'
             ) {
+              finishReason = 'tool-calls';
+            }
+            // Also override if we have tool calls but no explicit tool-calls finish reason
+            // This handles cases where Gemini doesn't send proper finish_reason
+            if (hasToolCalls && finishReason !== 'tool-calls') {
               finishReason = 'tool-calls';
             }
 
