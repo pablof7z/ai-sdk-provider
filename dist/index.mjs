@@ -3519,7 +3519,10 @@ var OpenRouterChatLanguageModel = class {
             const hasEncryptedReasoning = accumulatedReasoningDetails.some(
               (d) => d.type === "reasoning.encrypted" /* Encrypted */ && d.data
             );
-            if (hasToolCalls && hasEncryptedReasoning && finishReason === "stop") {
+            if (hasToolCalls && hasEncryptedReasoning && finishReason !== "tool-calls") {
+              finishReason = "tool-calls";
+            }
+            if (hasToolCalls && finishReason !== "tool-calls") {
               finishReason = "tool-calls";
             }
             if (finishReason === "tool-calls") {
