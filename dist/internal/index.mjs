@@ -2378,9 +2378,11 @@ function getCacheControl(providerMetadata) {
   return (_c = (_b15 = (_a15 = openrouter == null ? void 0 : openrouter.cacheControl) != null ? _a15 : openrouter == null ? void 0 : openrouter.cache_control) != null ? _b15 : anthropic == null ? void 0 : anthropic.cacheControl) != null ? _c : anthropic == null ? void 0 : anthropic.cache_control;
 }
 function convertToOpenRouterChatMessages(prompt) {
-  var _a15, _b15, _c, _d, _e, _f, _g, _h, _i, _j;
+  var _a15, _b15, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t;
   const messages = [];
-  for (const { role, content, providerOptions } of prompt) {
+  for (const message of prompt) {
+    const { role, content, providerOptions } = message;
+    const messageProviderMetadata = message.providerMetadata;
     switch (role) {
       case "system": {
         messages.push({
@@ -2497,10 +2499,12 @@ function convertToOpenRouterChatMessages(prompt) {
               break;
             }
             case "tool-call": {
-              const partReasoningDetails = (_c = part.providerOptions) == null ? void 0 : _c.openrouter;
-              if ((partReasoningDetails == null ? void 0 : partReasoningDetails.reasoning_details) && Array.isArray(partReasoningDetails.reasoning_details)) {
+              const openrouterOptions = (_c = part.providerOptions) == null ? void 0 : _c.openrouter;
+              const openrouterMetadata = (_d = part.providerMetadata) == null ? void 0 : _d.openrouter;
+              const partReasoningDetails = (_e = openrouterOptions == null ? void 0 : openrouterOptions.reasoning_details) != null ? _e : openrouterMetadata == null ? void 0 : openrouterMetadata.reasoning_details;
+              if (partReasoningDetails && Array.isArray(partReasoningDetails)) {
                 accumulatedReasoningDetails.push(
-                  ...partReasoningDetails.reasoning_details
+                  ...partReasoningDetails
                 );
               }
               toolCalls.push({
@@ -2516,10 +2520,12 @@ function convertToOpenRouterChatMessages(prompt) {
             case "reasoning": {
               reasoning += part.text;
               const parsedPartProviderOptions = OpenRouterProviderOptionsSchema.safeParse(part.providerOptions);
-              if (parsedPartProviderOptions.success && ((_e = (_d = parsedPartProviderOptions.data) == null ? void 0 : _d.openrouter) == null ? void 0 : _e.reasoning_details)) {
-                accumulatedReasoningDetails.push(
-                  ...parsedPartProviderOptions.data.openrouter.reasoning_details
-                );
+              const parsedPartProviderMetadata = OpenRouterProviderOptionsSchema.safeParse(
+                part.providerMetadata
+              );
+              const reasoningDetails = parsedPartProviderOptions.success ? (_g = (_f = parsedPartProviderOptions.data) == null ? void 0 : _f.openrouter) == null ? void 0 : _g.reasoning_details : parsedPartProviderMetadata.success ? (_i = (_h = parsedPartProviderMetadata.data) == null ? void 0 : _h.openrouter) == null ? void 0 : _i.reasoning_details : void 0;
+              if (reasoningDetails) {
+                accumulatedReasoningDetails.push(...reasoningDetails);
               }
               break;
             }
@@ -2531,8 +2537,9 @@ function convertToOpenRouterChatMessages(prompt) {
           }
         }
         const parsedProviderOptions = OpenRouterProviderOptionsSchema.safeParse(providerOptions);
-        const messageReasoningDetails = parsedProviderOptions.success ? (_g = (_f = parsedProviderOptions.data) == null ? void 0 : _f.openrouter) == null ? void 0 : _g.reasoning_details : void 0;
-        const messageAnnotations = parsedProviderOptions.success ? (_i = (_h = parsedProviderOptions.data) == null ? void 0 : _h.openrouter) == null ? void 0 : _i.annotations : void 0;
+        const parsedProviderMetadata = OpenRouterProviderOptionsSchema.safeParse(messageProviderMetadata);
+        const messageReasoningDetails = (_n = parsedProviderOptions.success ? (_k = (_j = parsedProviderOptions.data) == null ? void 0 : _j.openrouter) == null ? void 0 : _k.reasoning_details : void 0) != null ? _n : parsedProviderMetadata.success ? (_m = (_l = parsedProviderMetadata.data) == null ? void 0 : _l.openrouter) == null ? void 0 : _m.reasoning_details : void 0;
+        const messageAnnotations = (_s = parsedProviderOptions.success ? (_p = (_o = parsedProviderOptions.data) == null ? void 0 : _o.openrouter) == null ? void 0 : _p.annotations : void 0) != null ? _s : parsedProviderMetadata.success ? (_r = (_q = parsedProviderMetadata.data) == null ? void 0 : _q.openrouter) == null ? void 0 : _r.annotations : void 0;
         const finalReasoningDetails = messageReasoningDetails && Array.isArray(messageReasoningDetails) && messageReasoningDetails.length > 0 ? messageReasoningDetails : accumulatedReasoningDetails.length > 0 ? accumulatedReasoningDetails : void 0;
         messages.push({
           role: "assistant",
@@ -2552,7 +2559,7 @@ function convertToOpenRouterChatMessages(prompt) {
             role: "tool",
             tool_call_id: toolResponse.toolCallId,
             content: content2,
-            cache_control: (_j = getCacheControl(providerOptions)) != null ? _j : getCacheControl(toolResponse.providerOptions)
+            cache_control: (_t = getCacheControl(providerOptions)) != null ? _t : getCacheControl(toolResponse.providerOptions)
           });
         }
         break;
