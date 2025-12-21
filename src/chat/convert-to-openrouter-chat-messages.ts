@@ -35,7 +35,11 @@ export function convertToOpenRouterChatMessages(
   prompt: LanguageModelV3Prompt,
 ): OpenRouterChatCompletionsInput {
   const messages: OpenRouterChatCompletionsInput = [];
-  for (const { role, content, providerOptions } of prompt) {
+  for (const message of prompt) {
+    const { role, content, providerOptions } = message;
+    // Also check for providerMetadata in case the AI SDK passes it through
+    const messageProviderMetadata = (message as Record<string, unknown>)
+      .providerMetadata as Record<string, unknown> | undefined;
     switch (role) {
       case 'system': {
         messages.push({
@@ -181,15 +185,22 @@ export function convertToOpenRouterChatMessages(
               break;
             }
             case 'tool-call': {
-              const partReasoningDetails = (
+              // Check both providerOptions (standard input) and providerMetadata (from previous response)
+              // The AI SDK may put reasoning_details in either location depending on how messages are reconstructed
+              const openrouterOptions = (
                 part.providerOptions as Record<string, unknown>
               )?.openrouter as Record<string, unknown> | undefined;
-              if (
-                partReasoningDetails?.reasoning_details &&
-                Array.isArray(partReasoningDetails.reasoning_details)
-              ) {
+              const openrouterMetadata = (
+                part as Record<string, unknown>
+              ).providerMetadata?.openrouter as Record<string, unknown> | undefined;
+
+              const partReasoningDetails =
+                openrouterOptions?.reasoning_details ??
+                openrouterMetadata?.reasoning_details;
+
+              if (partReasoningDetails && Array.isArray(partReasoningDetails)) {
                 accumulatedReasoningDetails.push(
-                  ...(partReasoningDetails.reasoning_details as ReasoningDetailUnion[]),
+                  ...(partReasoningDetails as ReasoningDetailUnion[]),
                 );
               }
               toolCalls.push({
@@ -204,16 +215,23 @@ export function convertToOpenRouterChatMessages(
             }
             case 'reasoning': {
               reasoning += part.text;
+              // Check both providerOptions and providerMetadata for reasoning_details
               const parsedPartProviderOptions =
                 OpenRouterProviderOptionsSchema.safeParse(part.providerOptions);
-              if (
-                parsedPartProviderOptions.success &&
-                parsedPartProviderOptions.data?.openrouter?.reasoning_details
-              ) {
-                accumulatedReasoningDetails.push(
-                  ...parsedPartProviderOptions.data.openrouter
-                    .reasoning_details,
+              const parsedPartProviderMetadata =
+                OpenRouterProviderOptionsSchema.safeParse(
+                  (part as Record<string, unknown>).providerMetadata,
                 );
+
+              const reasoningDetails =
+                parsedPartProviderOptions.success
+                  ? parsedPartProviderOptions.data?.openrouter?.reasoning_details
+                  : parsedPartProviderMetadata.success
+                    ? parsedPartProviderMetadata.data?.openrouter?.reasoning_details
+                    : undefined;
+
+              if (reasoningDetails) {
+                accumulatedReasoningDetails.push(...reasoningDetails);
               }
               break;
             }
@@ -226,15 +244,27 @@ export function convertToOpenRouterChatMessages(
           }
         }
 
-        // Check message-level providerOptions for preserved reasoning_details and annotations
+        // Check message-level providerOptions and providerMetadata for preserved reasoning_details and annotations
         const parsedProviderOptions =
           OpenRouterProviderOptionsSchema.safeParse(providerOptions);
-        const messageReasoningDetails = parsedProviderOptions.success
-          ? parsedProviderOptions.data?.openrouter?.reasoning_details
-          : undefined;
-        const messageAnnotations = parsedProviderOptions.success
-          ? parsedProviderOptions.data?.openrouter?.annotations
-          : undefined;
+        const parsedProviderMetadata =
+          OpenRouterProviderOptionsSchema.safeParse(messageProviderMetadata);
+
+        // Prefer providerOptions, fall back to providerMetadata
+        const messageReasoningDetails =
+          (parsedProviderOptions.success
+            ? parsedProviderOptions.data?.openrouter?.reasoning_details
+            : undefined) ??
+          (parsedProviderMetadata.success
+            ? parsedProviderMetadata.data?.openrouter?.reasoning_details
+            : undefined);
+        const messageAnnotations =
+          (parsedProviderOptions.success
+            ? parsedProviderOptions.data?.openrouter?.annotations
+            : undefined) ??
+          (parsedProviderMetadata.success
+            ? parsedProviderMetadata.data?.openrouter?.annotations
+            : undefined);
 
         // Use message-level reasoning_details if available, otherwise use accumulated from parts
         const finalReasoningDetails =
